@@ -1,0 +1,69 @@
+// test.rn - basic reborn program to test the compiler
+
+let struct Point
+{
+    let x: int;
+    let y: int;
+};
+
+let enum Color
+{
+    let Red;
+    let Green := 10;
+    let Blue;
+};
+
+let add: int = (a: int, b: int)
+{
+    return a + b;
+}
+
+let greet: void = (name: string)
+{
+    printf("hello, %s\n", name);
+    return;
+}
+
+main := ()
+{
+    let x: int = 10;
+    let y: int = 20;
+    let sum := add(x, y);
+
+    printf("sum: %d\n", sum);
+
+    if sum > 25 {
+        printf("big number\n");
+    }
+    elif sum == 30 {
+        printf("exactly 30\n");
+    }
+    else {
+        printf("small number\n");
+    }
+
+    let i: int = 0;
+    while (i < 3) {
+        printf("i = %d\n", i);
+        i++;
+    }
+
+    for (let j: int = 0; j < 3; j++) {
+        printf("j = %d\n", j);
+    }
+
+    for::5 {
+        printf("range loop iter\n");
+    }
+
+    let letter: char = 'a';
+    let code := letter-->int;
+    printf("ascii of a: %d\n", code);
+
+    let p: Point;
+    p.x = 4;
+    p.y = 8;
+    printf("point: %d %d\n", p.x, p.y);
+
+    return;
+}
