@@ -25,7 +25,7 @@
 static void die(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr, "reborn: fatal: ");
+    fprintf(stderr, "clorn: fatal: ");
     vfprintf(stderr, fmt, ap);
     fprintf(stderr, "\n");
     va_end(ap);
@@ -421,7 +421,7 @@ static void lex(Lexer *l) {
             case '[': k2 = TK_LBRACKET;  break;
             case ']': k2 = TK_RBRACKET;  break;
             default:
-                fprintf(stderr, "reborn: warning: unknown char '%c' at line %d col %d, skipping\n",
+                fprintf(stderr, "clorn: warning: unknown char '%c' at line %d col %d, skipping\n",
                         s[i], tl, tc);
                 ADVANCE();
                 continue;
@@ -583,7 +583,7 @@ static int p_match(Parser *p, TokenKind k) {
 static Token *p_expect(Parser *p, TokenKind k, const char *msg) {
     if (p_check(p, k)) return p_advance(p);
     Token *t = p_peek(p);
-    fprintf(stderr, "reborn: error: line %d col %d: %s (got '%s')\n",
+    fprintf(stderr, "clorn: error: line %d col %d: %s (got '%s')\n",
             t->line, t->col, msg, t->text);
     p->had_error = 1;
     return t; /* try to recover */
@@ -618,7 +618,7 @@ static char *parse_type(Parser *p) {
         case TK_TYPE_VOID:   base = "void";   p_advance(p); break;
         case TK_IDENT:       base = t->text;  p_advance(p); break;
         default:
-            fprintf(stderr, "reborn: error: line %d: expected type, got '%s'\n",
+            fprintf(stderr, "clorn: error: line %d: expected type, got '%s'\n",
                     t->line, t->text);
             p->had_error = 1;
             return xstrdup("int");
@@ -824,7 +824,7 @@ static Node *parse_let(Parser *p) {
         return n;
     }
 
-    fprintf(stderr, "reborn: error: line %d: expected ':=' or ': type =' after identifier '%s'\n",
+    fprintf(stderr, "clorn: error: line %d: expected ':=' or ': type =' after identifier '%s'\n",
             line, n->name);
     p->had_error = 1;
     return n;
@@ -1182,7 +1182,7 @@ static Node *parse_primary(Parser *p) {
     }
 
     /* if nothing matched, skip and return dummy */
-    fprintf(stderr, "reborn: error: line %d: unexpected token '%s' in expression\n",
+    fprintf(stderr, "clorn: error: line %d: unexpected token '%s' in expression\n",
             line, t->text);
     p->had_error = 1;
     p_advance(p);
@@ -1273,7 +1273,7 @@ static Node *parse_program(Parser *p) {
         } else if (t->kind == TK_EXTERN) {
             nodelist_push(&prog->stmts, parse_extern(p));
         } else {
-            fprintf(stderr, "reborn: error: line %d: unexpected top-level token '%s'\n",
+            fprintf(stderr, "clorn: error: line %d: unexpected top-level token '%s'\n",
                     t->line, t->text);
             p->had_error = 1;
             p_advance(p);
@@ -1683,7 +1683,7 @@ static char *read_file(const char *path) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: reborn <source.rn> [output.c]\n");
+        fprintf(stderr, "usage: clorn <source.rn> [output.c]\n");
         return 1;
     }
 
@@ -1698,7 +1698,7 @@ int main(int argc, char **argv) {
     Node *ast = parse_program(&parser);
 
     if (parser.had_error) {
-        fprintf(stderr, "reborn: compilation failed due to errors\n");
+        fprintf(stderr, "clorn: compilation failed due to errors\n");
         return 1;
     }
 
