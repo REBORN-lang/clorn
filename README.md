@@ -1,5 +1,7 @@
 # clorn
 
+> (!) Last reported state: `Unfinished`
+
 **clorn** is a POSIX C implementation of Reborn, 100% written by Claude (Sonnet 4.6) \
 clorn is *just an experiment* and it is **not recommended** to use it for production code.
 
