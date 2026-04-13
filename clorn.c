@@ -9,9 +9,6 @@
  * implements revision 26013 of the reborn standard (RS)
  *
  * pipeline: source -> lexer -> tokens -> parser -> ast -> codegen -> c99
- *
- * build: make
- * usage: ./clorn in.rn out.c
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -687,6 +684,23 @@ static Node *parse_block(Parser *p) {
     return blk;
 }
 
+/* parse a braced block OR a single braceless statement (R6.1)
+ * always returns an ND_BLOCK node for uniformity in codegen */
+static Node *parse_block_or_stmt(Parser *p) {
+    if (p_check(p, TK_LBRACE)) {
+        return parse_block(p);
+    }
+    /* braceless: wrap the single statement in a synthetic block */
+    int line = p_peek(p)->line;
+    Node *blk = node_new(ND_BLOCK, line);
+    blk->stmts.items = NULL;
+    blk->stmts.len = 0;
+    blk->stmts.cap = 0;
+    Node *s = parse_stmt(p);
+    if (s) nodelist_push(&blk->stmts, s);
+    return blk;
+}
+
 /* let statement parsing — handles vars, functions, structs, enums, unions */
 static Node *parse_let(Parser *p) {
     int line = p_peek(p)->line;
@@ -896,7 +910,7 @@ static Node *parse_if(Parser *p) {
     n->cond = parse_expr(p);
     if (has_paren) p_expect(p, TK_RPAREN, "expected ')' after if condition");
 
-    n->body = parse_block(p);
+    n->body = parse_block_or_stmt(p);
 
     /* elif chain */
     while (p_check(p, TK_ELIF)) {
@@ -906,12 +920,12 @@ static Node *parse_if(Parser *p) {
         has_paren = p_match(p, TK_LPAREN);
         elif->cond = parse_expr(p);
         if (has_paren) p_expect(p, TK_RPAREN, "expected ')' after elif condition");
-        elif->body = parse_block(p);
+        elif->body = parse_block_or_stmt(p);
         nodelist_push(&n->branches, elif);
     }
 
     if (p_match(p, TK_ELSE)) {
-        n->else_branch = parse_block(p);
+        n->else_branch = parse_block_or_stmt(p);
     }
     return n;
 }
@@ -924,7 +938,7 @@ static Node *parse_while(Parser *p) {
     int has_paren = p_match(p, TK_LPAREN);
     n->cond = parse_expr(p);
     if (has_paren) p_expect(p, TK_RPAREN, "expected ')' after while condition");
-    n->body = parse_block(p);
+    n->body = parse_block_or_stmt(p);
     return n;
 }
 
@@ -938,7 +952,7 @@ static Node *parse_for(Parser *p) {
         Node *n = node_new(ND_FOR_RANGE, line);
         n->value = xstrdup(p_peek(p)->text);
         p_advance(p);
-        n->body = parse_block(p);
+        n->body = parse_block_or_stmt(p);
         return n;
     }
 
@@ -967,7 +981,7 @@ static Node *parse_for(Parser *p) {
         n->post = parse_expr(p);
     if (has_paren) p_expect(p, TK_RPAREN, "expected ')' after for clauses");
 
-    n->body = parse_block(p);
+    n->body = parse_block_or_stmt(p);
     return n;
 }
 
@@ -1090,7 +1104,19 @@ static Node *parse_primary(Parser *p) {
         p_advance(p);
         Node *n = node_new(nk, line);
         p_expect(p, TK_LPAREN, "expected '(' after sizeof/typeof");
-        n->left = parse_expr(p);
+        /* argument may be a type keyword or an expression */
+        Token *arg = p_peek(p);
+        if (arg->kind == TK_TYPE_INT || arg->kind == TK_TYPE_FLOAT ||
+            arg->kind == TK_TYPE_CHAR || arg->kind == TK_TYPE_BOOL ||
+            arg->kind == TK_TYPE_STRING || arg->kind == TK_TYPE_VOID) {
+            /* it's a type name — store it as an ident node */
+            Node *tn = node_new(ND_IDENT, arg->line);
+            tn->name = xstrdup(arg->text);
+            n->left = tn;
+            p_advance(p);
+        } else {
+            n->left = parse_expr(p);
+        }
         p_expect(p, TK_RPAREN, "expected ')' after sizeof/typeof argument");
         return n;
     }
@@ -1411,23 +1437,11 @@ static void gen_node(CGen *g, Node *n) {
         case ND_VAR_DECL: {
             emit_indent(g);
             gen_type_prefix(g, n);
-            /* inferred type: detect from rhs node kind */
+            /* inferred type: use C23 `auto` directly — this is exactly what := maps to */
             if (n->is_inferred && !n->type_str) {
-                const char *inferred = "int";
-                if (n->right) {
-                    switch (n->right->kind) {
-                        case ND_FLOAT_LIT:  inferred = "float";  break;
-                        case ND_STRING_LIT: inferred = "char*";  break;
-                        case ND_CHAR_LIT:   inferred = "char";   break;
-                        case ND_BOOL_LIT:   inferred = "int";    break;
-                        case ND_CAST:       inferred = n->right->type_str
-                                                ? c_type(n->right->type_str) : "int"; break;
-                        default:            inferred = "int";    break;
-                    }
-                }
-                if (n->is_pointer)      emit(g, "%s *%s", inferred, n->name);
-                else if (n->is_array)   emit(g, "%s %s[]", inferred, n->name);
-                else                    emit(g, "%s %s", inferred, n->name);
+                if (n->is_pointer)    emit(g, "auto *%s", n->name);
+                else if (n->is_array) emit(g, "auto %s[]", n->name);
+                else                  emit(g, "auto %s", n->name);
             } else {
                 emit_var_type(g, n, n->name);
             }
@@ -1633,7 +1647,7 @@ static void gen_node(CGen *g, Node *n) {
         }
 
         case ND_PROGRAM: {
-            emit(g, "/* generated by reborn compiler (revision 26013) */\n");
+            emit(g, "/* generated by clorn (reborn revision 26013) — target: POSIX/ISO C23 */\n");
             emit(g, "#include <stdio.h>\n");
             emit(g, "#include <stdlib.h>\n");
             emit(g, "#include <string.h>\n\n");

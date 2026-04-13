@@ -1,10 +1,10 @@
-// test.rn - basic reborn program to test the compiler
+// test.rn - basic reborn program to clorn
 
-let struct Point
+let struct
 {
     let x: int;
     let y: int;
-};
+} Point;
 
 let enum Color
 {
@@ -20,27 +20,50 @@ let add: int = (a: int, b: int)
 
 let greet: void = (name: string)
 {
-    printf("hello, %s\n", name);
+    printf("Hello, %s\n", name);
     return;
 }
 
-main := ()
+//main: int = () // non-standard 'int' type entry point -- works, uncomment to test
+let main: void = ()
 {
-    let x: int = 10;
-    let y: int = 20;
+    printf("=== main() ===\n\n");
+
+    let x: int = 0;
+    let y: int = 0;
+
+    printf("insert a number: ");
+
+    // does string work?
+    let line: string  = NULL;
+    let size: size_t  = 0;
+    let read: ssize_t = getline(&line, &size, stdin);
+    if read == -1
+        printf("getline() error while parsing input\n");
+
+    x = atoi(line);
+
+    printf("insert a second number: ");
+    // re-read buffer
+    if read = getline(&line, &size, stdin) == -1
+        printf("getline() error while parsing input\n");
+    y = atoi(line);
+
+    free(line);
+    line = NULL;
+    size = 0;
+    read = 0;
+
     let sum := add(x, y);
 
     printf("sum: %d\n", sum);
 
-    if sum > 25 {
+    if sum > 25
         printf("big number\n");
-    }
-    elif sum == 30 {
+    elif sum == 30
         printf("exactly 30\n");
-    }
-    else {
+    else
         printf("small number\n");
-    }
 
     let i: int = 0;
     while (i < 3) {
@@ -53,11 +76,11 @@ main := ()
     }
 
     for::5 {
-        printf("range loop iter\n");
+        printf("%d range loop iter\n", _i);
     }
 
     let letter: char = 'a';
-    let code := letter-->int;
+    let code := letter-->int; // C explicit cast
     printf("ascii of a: %d\n", code);
 
     let p: Point;
@@ -65,5 +88,5 @@ main := ()
     p.y = 8;
     printf("point: %d %d\n", p.x, p.y);
 
-    return;
+    return 0;
 }

@@ -1,7 +1,7 @@
 # this Makefile was human-written
 
 CC	   	 		=	gcc
-OPTS   	 		=	-std=c11 -Wall -Wextra -pedantic -O0
+OPTS   	 		=	-Wall -Wextra -pedantic -O0
 IN	   	 		=	clorn.c
 OUT				=	clorn
 TEST_IN			=	test.rn
@@ -19,5 +19,5 @@ test: all
 clean:
 	rm -v $(OUT)
 
-cleantest: clean
+cleanall: clean
 	rm -v $(TEST_OUT) $(TEST_OUT_OUT)
