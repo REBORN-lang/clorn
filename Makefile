@@ -20,4 +20,4 @@ clean:
 	rm -v $(OUT)
 
 cleanall: clean
-	rm -v $(TEST_OUT) $(TEST_OUT_OUT)
+	rm -v $(TEST_OUT_OUT)
