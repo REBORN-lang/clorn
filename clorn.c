@@ -25,7 +25,7 @@
 static void die(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr, "clorn: fatal: ");
+    fprintf(stderr, "reborn: fatal: ");
     vfprintf(stderr, fmt, ap);
     fprintf(stderr, "\n");
     va_end(ap);
@@ -144,9 +144,10 @@ typedef enum {
 
 typedef struct {
     TokenKind kind;
-    char     *text;   /* owned copy */
+    char     *text;         /* owned copy */
     int       line;
     int       col;
+    size_t    byte_offset;  /* byte offset in source — for raw slice extraction */
 } Token;
 
 typedef struct {
@@ -160,12 +161,12 @@ typedef struct {
     size_t      tok_cap;
 } Lexer;
 
-static void lex_push(Lexer *l, TokenKind k, const char *text, int line, int col) {
+static void lex_push(Lexer *l, TokenKind k, const char *text, int line, int col, size_t boff) {
     if (l->tok_len >= l->tok_cap) {
         l->tok_cap = l->tok_cap ? l->tok_cap * 2 : 256;
         l->tokens  = xrealloc(l->tokens, l->tok_cap * sizeof(Token));
     }
-    l->tokens[l->tok_len++] = (Token){ k, xstrdup(text), line, col };
+    l->tokens[l->tok_len++] = (Token){ k, xstrdup(text), line, col, boff };
 }
 
 static TokenKind keyword_kind(const char *s) {
@@ -243,7 +244,7 @@ static void lex(Lexer *l) {
             memcpy(buf+1, s+start, len);
             buf[len+1] = '"';
             buf[len+2] = '\0';
-            lex_push(l, TK_STRING_LIT, buf, tl, tc);
+            lex_push(l, TK_STRING_LIT, buf, tl, tc, i);
             free(buf);
             if (s[i]=='"') ADVANCE();
             continue;
@@ -263,7 +264,7 @@ static void lex(Lexer *l) {
             memcpy(buf+1, s+start, len);
             buf[len+1] = '\'';
             buf[len+2] = '\0';
-            lex_push(l, TK_CHAR_LIT, buf, tl, tc);
+            lex_push(l, TK_CHAR_LIT, buf, tl, tc, i);
             free(buf);
             if (s[i]=='\'') ADVANCE();
             continue;
@@ -283,7 +284,7 @@ static void lex(Lexer *l) {
             char *buf = xmalloc(len + 1);
             memcpy(buf, s+start, len);
             buf[len] = '\0';
-            lex_push(l, is_float ? TK_FLOAT_LIT : TK_INT_LIT, buf, tl, tc);
+            lex_push(l, is_float ? TK_FLOAT_LIT : TK_INT_LIT, buf, tl, tc, i);
             free(buf);
             continue;
         }
@@ -297,7 +298,7 @@ static void lex(Lexer *l) {
             memcpy(buf, s+start, len);
             buf[len] = '\0';
             TokenKind k = keyword_kind(buf);
-            lex_push(l, k, buf, tl, tc);
+            lex_push(l, k, buf, tl, tc, i);
             free(buf);
             continue;
         }
@@ -306,91 +307,91 @@ static void lex(Lexer *l) {
         /* --> cast */
         if (s[i]=='-' && s[i+1]=='-' && s[i+2]=='>') {
             ADVANCE(); ADVANCE(); ADVANCE();
-            lex_push(l, TK_CAST, "-->", tl, tc);
+            lex_push(l, TK_CAST, "-->", tl, tc, i);
             continue;
         }
         /* -> arrow */
         if (s[i]=='-' && s[i+1]=='>') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_ARROW, "->", tl, tc);
+            lex_push(l, TK_ARROW, "->", tl, tc, i);
             continue;
         }
         /* := */
         if (s[i]==':' && s[i+1]=='=') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_COLONASSIGN, ":=", tl, tc);
+            lex_push(l, TK_COLONASSIGN, ":=", tl, tc, i);
             continue;
         }
         /* :: */
         if (s[i]==':' && s[i+1]==':') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_DCOLON, "::", tl, tc);
+            lex_push(l, TK_DCOLON, "::", tl, tc, i);
             continue;
         }
         /* =: (equality) */
         if (s[i]=='=' && s[i+1]==':') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_EQ, "=:", tl, tc);
+            lex_push(l, TK_EQ, "=:", tl, tc, i);
             continue;
         }
         /* == */
         if (s[i]=='=' && s[i+1]=='=') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_EQ, "==", tl, tc);
+            lex_push(l, TK_EQ, "==", tl, tc, i);
             continue;
         }
         /* != */
         if (s[i]=='!' && s[i+1]=='=') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_NEQ, "!=", tl, tc);
+            lex_push(l, TK_NEQ, "!=", tl, tc, i);
             continue;
         }
         /* !> */
         if (s[i]=='!' && s[i+1]=='>') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_NOT_GT, "!>", tl, tc);
+            lex_push(l, TK_NOT_GT, "!>", tl, tc, i);
             continue;
         }
         /* !< */
         if (s[i]=='!' && s[i+1]=='<') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_NOT_LT, "!<", tl, tc);
+            lex_push(l, TK_NOT_LT, "!<", tl, tc, i);
             continue;
         }
         /* <= */
         if (s[i]=='<' && s[i+1]=='=') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_LTE, "<=", tl, tc);
+            lex_push(l, TK_LTE, "<=", tl, tc, i);
             continue;
         }
         /* >= */
         if (s[i]=='>' && s[i+1]=='=') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_GTE, ">=", tl, tc);
+            lex_push(l, TK_GTE, ">=", tl, tc, i);
             continue;
         }
         /* && */
         if (s[i]=='&' && s[i+1]=='&') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_AND, "&&", tl, tc);
+            lex_push(l, TK_AND, "&&", tl, tc, i);
             continue;
         }
         /* || */
         if (s[i]=='|' && s[i+1]=='|') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_OR, "||", tl, tc);
+            lex_push(l, TK_OR, "||", tl, tc, i);
             continue;
         }
         /* ++ */
         if (s[i]=='+' && s[i+1]=='+') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_INC, "++", tl, tc);
+            lex_push(l, TK_INC, "++", tl, tc, i);
             continue;
         }
         /* -- */
         if (s[i]=='-' && s[i+1]=='-') {
             ADVANCE(); ADVANCE();
-            lex_push(l, TK_DEC, "--", tl, tc);
+            lex_push(l, TK_DEC, "--", tl, tc, i);
             continue;
         }
 
@@ -421,12 +422,12 @@ static void lex(Lexer *l) {
             case '[': k2 = TK_LBRACKET;  break;
             case ']': k2 = TK_RBRACKET;  break;
             default:
-                fprintf(stderr, "clorn: warning: unknown char '%c' at line %d col %d, skipping\n",
+                fprintf(stderr, "reborn: warning: unknown char '%c' at line %d col %d, skipping\n",
                         s[i], tl, tc);
                 ADVANCE();
                 continue;
         }
-        lex_push(l, k2, buf2, tl, tc);
+        lex_push(l, k2, buf2, tl, tc, i);
         ADVANCE();
     }
 
@@ -552,11 +553,12 @@ static Node *node_new(NodeKind kind, int line) {
  * ============================================================ */
 
 typedef struct {
-    Token  *tokens;
-    size_t  pos;
-    size_t  len;
+    Token      *tokens;
+    size_t      pos;
+    size_t      len;
+    const char *src;   /* original source — for raw extern block extraction */
     /* error reporting */
-    int     had_error;
+    int         had_error;
 } Parser;
 
 static Token *p_peek(Parser *p) { return &p->tokens[p->pos]; }
@@ -583,7 +585,7 @@ static int p_match(Parser *p, TokenKind k) {
 static Token *p_expect(Parser *p, TokenKind k, const char *msg) {
     if (p_check(p, k)) return p_advance(p);
     Token *t = p_peek(p);
-    fprintf(stderr, "clorn: error: line %d col %d: %s (got '%s')\n",
+    fprintf(stderr, "reborn: error: line %d col %d: %s (got '%s')\n",
             t->line, t->col, msg, t->text);
     p->had_error = 1;
     return t; /* try to recover */
@@ -618,7 +620,7 @@ static char *parse_type(Parser *p) {
         case TK_TYPE_VOID:   base = "void";   p_advance(p); break;
         case TK_IDENT:       base = t->text;  p_advance(p); break;
         default:
-            fprintf(stderr, "clorn: error: line %d: expected type, got '%s'\n",
+            fprintf(stderr, "reborn: error: line %d: expected type, got '%s'\n",
                     t->line, t->text);
             p->had_error = 1;
             return xstrdup("int");
@@ -824,77 +826,241 @@ static Node *parse_let(Parser *p) {
         return n;
     }
 
-    fprintf(stderr, "clorn: error: line %d: expected ':=' or ': type =' after identifier '%s'\n",
+    fprintf(stderr, "reborn: error: line %d: expected ':=' or ': type =' after identifier '%s'\n",
             line, n->name);
     p->had_error = 1;
     return n;
 }
 
 
-/* import statement */
+/* import statement — emits #include in the generated C file
+ *
+ * forms:
+ *   import rsl;               -> #include <rsl.h>  (standard header, .rh extension assumed)
+ *   import "myfile.rh";       -> #include "myfile.rh"
+ *   import rsl.rh;            -> #include <rsl.h>  (explicit .rh, maps to .h for C)
+ *   import { rsl, myfile.rh } -> one #include per entry
+ */
 static Node *parse_import(Parser *p) {
     int line = p_peek(p)->line;
     p_advance(p); /* consume 'import' */
     Node *n = node_new(ND_IMPORT, line);
-    n->name = xstrdup("import");
 
     if (p_match(p, TK_LBRACE)) {
-        /* import { a, b } */
+        /* import { a, b, ... } */
+        char buf[1024] = {0};
+        int first = 1;
         while (!p_check(p, TK_RBRACE) && !p_check(p, TK_EOF)) {
-            /* just skip for now */
-            p_advance(p);
-            p_match(p, TK_COMMA);
+            Token *t = p_advance(p);
+            if (t->kind == TK_COMMA) continue;
+            /* collect the full dotted name e.g. rsl.rh */
+            char name[256];
+            snprintf(name, sizeof(name), "%s", t->text);
+            while (p_check(p, TK_DOT)) {
+                p_advance(p);
+                Token *ext = p_advance(p);
+                strncat(name, ".", sizeof(name)-strlen(name)-1);
+                strncat(name, ext->text, sizeof(name)-strlen(name)-1);
+            }
+            if (!first) strncat(buf, "\n", sizeof(buf)-strlen(buf)-1);
+            /* decide angle vs quote brackets: string literals get quotes */
+            if (t->kind == TK_STRING_LIT) {
+                /* strip the reborn quotes and use as-is */
+                char stripped[256];
+                snprintf(stripped, sizeof(stripped), "%s", name);
+                char entry[300];
+                snprintf(entry, sizeof(entry), "#include %s", stripped);
+                strncat(buf, entry, sizeof(buf)-strlen(buf)-1);
+            } else {
+                /* standard header: strip .rh -> .h, wrap in <> */
+                char hname[256];
+                snprintf(hname, sizeof(hname), "%s", name);
+                char *dot = strstr(hname, ".rh");
+                if (dot) { strcpy(dot, ".h"); }
+                else {
+                    /* no extension: append .h */
+                    strncat(hname, ".h", sizeof(hname)-strlen(hname)-1);
+                }
+                char entry[300];
+                snprintf(entry, sizeof(entry), "#include <%s>", hname);
+                strncat(buf, entry, sizeof(buf)-strlen(buf)-1);
+            }
+            first = 0;
         }
         p_expect(p, TK_RBRACE, "expected '}' after import list");
+        n->raw_c = xstrdup(buf);
+    } else if (p_check(p, TK_STRING_LIT)) {
+        /* import "file.rh"; */
+        Token *t = p_advance(p);
+        char buf[256];
+        snprintf(buf, sizeof(buf), "#include %s", t->text);
+        n->raw_c = xstrdup(buf);
     } else {
-        /* import name; or import "file"; */
-        p_advance(p); /* skip name/string */
+        /* import name; or import name.rh; */
+        Token *t = p_advance(p);
+        char name[256];
+        snprintf(name, sizeof(name), "%s", t->text);
+        while (p_check(p, TK_DOT)) {
+            p_advance(p);
+            Token *ext = p_advance(p);
+            strncat(name, ".", sizeof(name)-strlen(name)-1);
+            strncat(name, ext->text, sizeof(name)-strlen(name)-1);
+        }
+        char hname[256];
+        snprintf(hname, sizeof(hname), "%s", name);
+        char *dot = strstr(hname, ".rh");
+        if (dot) { strcpy(dot, ".h"); }
+        else { strncat(hname, ".h", sizeof(hname)-strlen(hname)-1); }
+        char buf[300];
+        snprintf(buf, sizeof(buf), "#include <%s>", hname);
+        n->raw_c = xstrdup(buf);
     }
     p_match(p, TK_SEMICOLON);
     return n;
 }
 
-/* from rsl import { printf(), ... } */
+/* from rsl import { printf(), getline() }
+ * we stub the import selectivity — just emit the header include
+ * e.g. from rsl import { printf() } -> #include <rsl.h>
+ */
 static Node *parse_from(Parser *p) {
     int line = p_peek(p)->line;
     p_advance(p); /* consume 'from' */
     Node *n = node_new(ND_IMPORT, line);
-    n->name = xstrdup("from");
-    /* skip everything until semicolon or closing brace */
-    while (!p_check(p, TK_SEMICOLON) && !p_check(p, TK_EOF)) p_advance(p);
+
+    /* collect header name */
+    char hname[256] = {0};
+    if (p_check(p, TK_STRING_LIT)) {
+        Token *t = p_advance(p);
+        /* strip quotes */
+        snprintf(hname, sizeof(hname), "%s", t->text + 1);
+        char *end = strrchr(hname, '"');
+        if (end) *end = '\0';
+    } else {
+        Token *t = p_advance(p);
+        snprintf(hname, sizeof(hname), "%s", t->text);
+        while (p_check(p, TK_DOT)) {
+            p_advance(p);
+            Token *ext = p_advance(p);
+            strncat(hname, ".", sizeof(hname)-strlen(hname)-1);
+            strncat(hname, ext->text, sizeof(hname)-strlen(hname)-1);
+        }
+    }
+
+    /* consume 'import' keyword */
+    if (p_check(p, TK_IMPORT)) p_advance(p);
+
+    /* skip the { ... } import list — selectivity is non-standard to implement */
+    if (p_match(p, TK_LBRACE)) {
+        while (!p_check(p, TK_RBRACE) && !p_check(p, TK_EOF)) p_advance(p);
+        p_match(p, TK_RBRACE);
+    } else {
+        /* bare symbol, skip to semicolon */
+        while (!p_check(p, TK_SEMICOLON) && !p_check(p, TK_EOF)) p_advance(p);
+    }
     p_match(p, TK_SEMICOLON);
+
+    /* map .rh -> .h */
+    char *dot = strstr(hname, ".rh");
+    if (dot) { strcpy(dot, ".h"); }
+    else if (!strchr(hname, '.')) {
+        strncat(hname, ".h", sizeof(hname)-strlen(hname)-1);
+    }
+
+    char buf[300];
+    snprintf(buf, sizeof(buf), "#include <%s>", hname);
+    n->raw_c = xstrdup(buf);
     return n;
 }
 
-/* extern block / declaration */
+/* extern block / declaration
+ *
+ * extern "C" { ... }  — raw C block, content is emitted verbatim
+ * extern "C" type name(params);  — single C declaration, emitted verbatim
+ *
+ * the block content is reconstructed by re-joining token text,
+ * which preserves C code faithfully.
+ */
 static Node *parse_extern(Parser *p) {
     int line = p_peek(p)->line;
     p_advance(p); /* consume 'extern' */
     Node *n = node_new(ND_EXTERN_BLOCK, line);
 
-    /* consume "C" */
+    /* consume "C" language spec */
     if (p_check(p, TK_STRING_LIT)) p_advance(p);
 
     if (p_check(p, TK_LBRACE)) {
-        /* extern "C" { ... } — grab raw tokens until matching } */
-        p_advance(p);
-        /* we'll just skip for now and note it in output */
+        p_advance(p); /* consume { */
+
+        /* reconstruct block content from tokens */
+        char *buf = NULL;
+        size_t buflen = 0, bufcap = 0;
+
+#define APPEND(s) do { \
+    size_t _l = strlen(s); \
+    if (buflen + _l + 1 >= bufcap) { \
+        bufcap = (bufcap ? bufcap * 2 : 256) + _l + 1; \
+        buf = xrealloc(buf, bufcap); \
+    } \
+    memcpy(buf + buflen, s, _l); \
+    buflen += _l; \
+    buf[buflen] = '\0'; \
+} while(0)
+
         int depth = 1;
-        size_t start = p->pos;
+        Token *prev = NULL;
         while (!p_check(p, TK_EOF) && depth > 0) {
-            if (p_check(p, TK_LBRACE)) depth++;
-            else if (p_check(p, TK_RBRACE)) depth--;
-            if (depth > 0) p_advance(p);
+            Token *t = p_peek(p);
+            if (t->kind == TK_LBRACE) depth++;
+            else if (t->kind == TK_RBRACE) {
+                depth--;
+                if (depth == 0) break;
+            }
+            /* spacing heuristic: no space before ; , ) ] and after ( [ */
+            if (prev && t->kind != TK_SEMICOLON && t->kind != TK_COMMA &&
+                t->kind != TK_RPAREN && t->kind != TK_RBRACKET &&
+                prev->kind != TK_LPAREN && prev->kind != TK_LBRACKET) {
+                APPEND(" ");
+            }
+            APPEND(t->text);
+            prev = t;
+            p_advance(p);
         }
-        (void)start;
+#undef APPEND
+
         p_expect(p, TK_RBRACE, "expected '}' to close extern block");
-        n->raw_c = xstrdup("/* extern C block — not yet emitted */");
+        n->raw_c = buf ? buf : xstrdup("");
     } else {
-        /* single extern decl: type name(params); */
-        /* just skip to semicolon */
-        while (!p_check(p, TK_SEMICOLON) && !p_check(p, TK_EOF)) p_advance(p);
+        /* single extern decl: reconstruct until semicolon */
+        char *buf = NULL;
+        size_t buflen = 0, bufcap = 0;
+
+#define APPEND(s) do { \
+    size_t _l = strlen(s); \
+    if (buflen + _l + 1 >= bufcap) { \
+        bufcap = (bufcap ? bufcap * 2 : 256) + _l + 1; \
+        buf = xrealloc(buf, bufcap); \
+    } \
+    memcpy(buf + buflen, s, _l); \
+    buflen += _l; \
+    buf[buflen] = '\0'; \
+} while(0)
+
+        Token *prev = NULL;
+        while (!p_check(p, TK_SEMICOLON) && !p_check(p, TK_EOF)) {
+            Token *t = p_peek(p);
+            if (prev && t->kind != TK_LPAREN && t->kind != TK_COMMA &&
+                t->kind != TK_STAR && prev->kind != TK_LPAREN) {
+                APPEND(" ");
+            }
+            APPEND(t->text);
+            prev = t;
+            p_advance(p);
+        }
         p_match(p, TK_SEMICOLON);
-        n->raw_c = xstrdup("/* extern declaration — not yet emitted */");
+#undef APPEND
+
+        n->raw_c = buf ? buf : xstrdup("");
     }
     return n;
 }
@@ -1182,7 +1348,7 @@ static Node *parse_primary(Parser *p) {
     }
 
     /* if nothing matched, skip and return dummy */
-    fprintf(stderr, "clorn: error: line %d: unexpected token '%s' in expression\n",
+    fprintf(stderr, "reborn: error: line %d: unexpected token '%s' in expression\n",
             line, t->text);
     p->had_error = 1;
     p_advance(p);
@@ -1273,7 +1439,7 @@ static Node *parse_program(Parser *p) {
         } else if (t->kind == TK_EXTERN) {
             nodelist_push(&prog->stmts, parse_extern(p));
         } else {
-            fprintf(stderr, "clorn: error: line %d: unexpected top-level token '%s'\n",
+            fprintf(stderr, "reborn: error: line %d: unexpected top-level token '%s'\n",
                     t->line, t->text);
             p->had_error = 1;
             p_advance(p);
@@ -1424,14 +1590,18 @@ static void gen_node(CGen *g, Node *n) {
     switch (n->kind) {
 
         case ND_IMPORT:
-            /* stub: emit a comment */
-            emit_indent(g);
-            emit(g, "/* import (stubbed) */\n");
+            /* emit the prepared #include directive */
+            if (n->raw_c && n->raw_c[0]) {
+                emit(g, "%s\n", n->raw_c);
+            }
             break;
 
         case ND_EXTERN_BLOCK:
-            emit_indent(g);
-            emit(g, "%s\n", n->raw_c ? n->raw_c : "");
+            /* emit raw C content — may be a block body or a single declaration */
+            if (n->raw_c && n->raw_c[0]) {
+                emit_indent(g);
+                emit(g, "%s\n", n->raw_c);
+            }
             break;
 
         case ND_VAR_DECL: {
@@ -1582,9 +1752,9 @@ static void gen_node(CGen *g, Node *n) {
             break;
 
         case ND_FOR_RANGE: {
-            /* for::n  =>  for (int _i = 1; _i < n; _i++) */
+            /* for::n  =>  for (int _i = 0; _i < n; _i++) — iterates exactly n times */
             emit_indent(g);
-            emit(g, "for (int _i = 1; _i < %s; _i++)\n", n->value);
+            emit(g, "for (int _i = 0; _i < %s; _i++)\n", n->value);
             gen_node(g, n->body);
             break;
         }
@@ -1647,12 +1817,26 @@ static void gen_node(CGen *g, Node *n) {
         }
 
         case ND_PROGRAM: {
-            emit(g, "/* generated by clorn (reborn revision 26013) — target: POSIX/ISO C23 */\n");
+            emit(g, "/* generated by clorn (reborn revision 26013) — target: ISO C23 */\n");
             emit(g, "#include <stdio.h>\n");
             emit(g, "#include <stdlib.h>\n");
-            emit(g, "#include <string.h>\n\n");
+            emit(g, "#include <string.h>\n");
+            /* first pass: emit all import/#include directives */
             for (size_t i = 0; i < n->stmts.len; i++) {
-                gen_node(g, n->stmts.items[i]);
+                if (n->stmts.items[i]->kind == ND_IMPORT)
+                    gen_node(g, n->stmts.items[i]);
+            }
+            emit(g, "\n");
+            /* second pass: emit everything else */
+            for (size_t i = 0; i < n->stmts.len; i++) {
+                Node *s = n->stmts.items[i];
+                if (s->kind == ND_IMPORT) continue;
+                /* extern blocks at top level get no indent */
+                if (s->kind == ND_EXTERN_BLOCK) {
+                    emit(g, "%s\n", s->raw_c ? s->raw_c : "");
+                    continue;
+                }
+                gen_node(g, s);
             }
             break;
         }
@@ -1694,7 +1878,7 @@ int main(int argc, char **argv) {
     lex(&lexer);
 
     /* parse */
-    Parser parser = { .tokens = lexer.tokens, .pos = 0, .len = lexer.tok_len };
+    Parser parser = { .tokens = lexer.tokens, .pos = 0, .len = lexer.tok_len, .src = src };
     Node *ast = parse_program(&parser);
 
     if (parser.had_error) {

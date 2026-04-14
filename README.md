@@ -1,6 +1,7 @@
 # clorn
 
 > (!) Last reported state: `Almost finished`
+> (!) This compiler implementation is based off the [Standard](https://reborn.ct.ws/std), specifically, *revision 26013* as of now.
 
 **clorn** is a POSIX C implementation of Reborn, 100% written by Claude (Sonnet 4.6) \
 clorn is *just an experiment* and it is **not recommended** to use it for production code.
@@ -24,13 +25,5 @@ clorn is *just an experiment* and it is **not recommended** to use it for produc
 - `out.c`: clorn's output with `test.rn` as input.
 
 ## test notes
-- As of testing this version, the only bugs that were found are:
-- 1. The `for::n` 'range loop' does not work as intended:
-     ```
-      for::4 {
-       printf("This text should print 4 times.\n");
-      }
-     ```
-     But the text appears only `n-1` times. It's quite a trivial fix
-     but instead of manually applying it we will tell Sonnet 4.6 about
-     this issue and see if its capable of fixing it, in the next version.
+- All fine for now.
+
