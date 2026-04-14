@@ -1,5 +1,7 @@
 // test.rn - basic reborn program to clorn
 
+
+
 let struct
 {
     let x: int;
@@ -88,5 +90,10 @@ let main: void = ()
     p.y = 8;
     printf("point: %d %d\n", p.x, p.y);
 
-    return 0;
+    let end_of_test: bool = true;
+    if end_of_test == true:
+        printf("end of test.\n");
+        return 0;
+    else
+        return 1;
 }

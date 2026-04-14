@@ -1,7 +1,8 @@
 # clorn
 
 > (!) Last reported state: `Almost finished`
-> (!) This compiler implementation is based off the [Standard](https://reborn.ct.ws/std), specifically, *revision 26013* as of now.
+> (!) This compiler implementation is based off the [Standard](https://reborn.ct.ws/std), specifically, *revision 26015* as of now.
+> (!) This compiler implementation plans to *fully support* the extensions specified in the [Standard](https://reborn.ct.ws/std).
 
 **clorn** is a POSIX C implementation of Reborn, 100% written by Claude (Sonnet 4.6) \
 clorn is *just an experiment* and it is **not recommended** to use it for production code.
